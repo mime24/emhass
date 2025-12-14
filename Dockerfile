@@ -124,6 +124,7 @@ ENV IP=0.0.0.0
 
 # Entrypoint script inline
 ENTRYPOINT ["/bin/bash", "-c", "set -e && \
+mkdir -p /share/emhass && \
 WORKER_CLASS=${WORKER_CLASS:-uvicorn.workers.UvicornWorker} && \
 PORT=${PORT:-5000} && \
 IP=${IP:-0.0.0.0} && \
