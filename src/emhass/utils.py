@@ -1281,8 +1281,10 @@ async def build_secrets(
             # If data path specified by options.json, overwrite emhass_conf['data_path']
             if (
                 options.get("data_path", None) is not None
-                and pathlib.Path(options["data_path"]).exists()
+                
             ):
+                # Create directory if it doesn't exist
+                options["data_path"].mkdir(parents=False, exist_ok=True)
                 emhass_conf["data_path"] = pathlib.Path(options["data_path"])
 
             # Check to use Home Assistant local API
