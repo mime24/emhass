@@ -1284,8 +1284,9 @@ async def build_secrets(
                 
             ):
                 # Create directory if it doesn't exist
-                options["data_path"].mkdir(parents=False, exist_ok=True)
-                emhass_conf["data_path"] = pathlib.Path(options["data_path"])
+                data_path = pathlib.Path(options["data_path"])
+                data_path.mkdir(parents=False, exist_ok=True)
+                emhass_conf["data_path"] = data_path
 
             # Check to use Home Assistant local API
             if not no_response and os.getenv("SUPERVISOR_TOKEN", None) is not None:
