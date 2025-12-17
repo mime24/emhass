@@ -1279,10 +1279,7 @@ async def build_secrets(
             key_from_options = options.get("long_lived_token", "empty")
 
             # If data path specified by options.json, overwrite emhass_conf['data_path']
-            if (
-                options.get("data_path", None) is not None
-                
-            ):
+            if options.get("data_path", None) is not None:
                 # Try to create directory if it doesn't exist. if successful set data_path in emhass_conf
                 try: 
                     data_path = pathlib.Path(options["data_path"])
