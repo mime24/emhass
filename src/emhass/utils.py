@@ -1283,10 +1283,13 @@ async def build_secrets(
                 options.get("data_path", None) is not None
                 
             ):
-                # Create directory if it doesn't exist
-                data_path = pathlib.Path(options["data_path"])
-                data_path.mkdir(parents=False, exist_ok=True)
-                emhass_conf["data_path"] = data_path
+                # Try to create directory if it doesn't exist. if successful set data_path in emhass_conf
+                try: 
+                    data_path = pathlib.Path(options["data_path"])
+                    data_path.mkdir(parents=False, exist_ok=True)
+                    emhass_conf["data_path"] = data_path
+                except Exception as e:
+                    logger.warning(f"cannot create data_path directory provided via options. keeping default")
 
             # Check to use Home Assistant local API
             if not no_response and os.getenv("SUPERVISOR_TOKEN", None) is not None:
