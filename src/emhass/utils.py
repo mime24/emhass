@@ -1285,7 +1285,7 @@ async def build_secrets(
                     data_path = pathlib.Path(options["data_path"])
                     data_path.mkdir(parents=False, exist_ok=True)
                     emhass_conf["data_path"] = data_path
-                except:
+                except Exception:
                     logger.warning(
                         "cannot create data_path directory provided via options. keeping default"
                     )
