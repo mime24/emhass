@@ -5217,34 +5217,6 @@ class TestOptimization(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(opt_res_with_cost["SOC_opt"].iloc[3], 0.50)
 
 
-class TestOptimizationModeNormalization(unittest.TestCase):
-    def test_normalize_heat_cool_mode(self):
-        class _LoggerStub:
-            def __init__(self):
-                self.calls = []
-
-            def warning(self, *args):
-                self.calls.append(args)
-
-        opt = Optimization.__new__(Optimization)
-        opt.logger = _LoggerStub()
-
-        self.assertEqual(opt._normalize_heat_cool_mode(" HeAt ", "Load 0 thermal_battery"), "heat")
-        self.assertEqual(opt._normalize_heat_cool_mode(" COOL ", "Load 0 thermal_battery"), "cool")
-
-        normalized = opt._normalize_heat_cool_mode(" typo ", "Load 0 thermal_battery")
-        self.assertEqual(normalized, "heat")
-        self.assertEqual(len(opt.logger.calls), 1)
-        self.assertEqual(
-            opt.logger.calls[0],
-            (
-                "%s: unknown sense '%s', falling back to 'heat'",
-                "Load 0 thermal_battery",
-                " typo ",
-            ),
-        )
-
-
 if __name__ == "__main__":
     unittest.main()
     ch.close()

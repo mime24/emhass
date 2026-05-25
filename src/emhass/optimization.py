@@ -1437,7 +1437,11 @@ class Optimization:
         cooling_constant = hc["cooling_constant"]
         heating_rate = hc["heating_rate"]
         overshoot_temperature = hc.get("overshoot_temperature", None)
-        sense = hc.get("sense", "heat")
+        sense = utils.normalize_heat_cool_mode(
+            hc.get("sense", "heat"),
+            field_name="sense",
+            context=f"Load {k} thermal_config",
+        )
         nominal_power = self.optim_conf["nominal_power_of_deferrable_loads"][k]
 
         # Thermal Inertia Logic
@@ -1608,18 +1612,6 @@ class Optimization:
             return heating_demand
         return heating_demand - solar_gain
 
-    def _normalize_heat_cool_mode(self, mode, context):
-        """Normalize heat/cool mode and fall back to heat on unknown values."""
-        mode_norm = str(mode).strip().lower()
-        if mode_norm not in {"heat", "cool"}:
-            self.logger.warning(
-                "%s: unknown sense '%s', falling back to 'heat'",
-                context,
-                mode,
-            )
-            return "heat"
-        return mode_norm
-
     def _add_thermal_battery_constraints(self, constraints, k, data_opt, p_load):
         """
         Handle constraints for thermal battery loads (Vectorized, Legacy Match).
@@ -1655,8 +1647,9 @@ class Optimization:
         conversion = 3600 / (density * heat_capacity * volume)
 
         # Determine heat-flow direction: +1 for heating (pump adds heat), -1 for cooling (pump removes heat)
-        sense = self._normalize_heat_cool_mode(
+        sense = utils.normalize_heat_cool_mode(
             hc.get("sense", "heat"),
+            field_name="sense",
             context=f"Load {k} thermal_battery",
         )
         sense_coeff = 1 if sense == "heat" else -1
