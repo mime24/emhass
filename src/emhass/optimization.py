@@ -1608,6 +1608,18 @@ class Optimization:
             return heating_demand
         return heating_demand - solar_gain
 
+    def _normalize_heat_cool_mode(self, mode, context):
+        """Normalize heat/cool mode and fall back to heat on unknown values."""
+        mode_norm = str(mode).strip().lower()
+        if mode_norm not in {"heat", "cool"}:
+            self.logger.warning(
+                "%s: unknown sense '%s', falling back to 'heat'",
+                context,
+                mode,
+            )
+            return "heat"
+        return mode_norm
+
     def _add_thermal_battery_constraints(self, constraints, k, data_opt, p_load):
         """
         Handle constraints for thermal battery loads (Vectorized, Legacy Match).
@@ -1643,7 +1655,10 @@ class Optimization:
         conversion = 3600 / (density * heat_capacity * volume)
 
         # Determine heat-flow direction: +1 for heating (pump adds heat), -1 for cooling (pump removes heat)
-        sense = hc.get("sense", "heat")
+        sense = self._normalize_heat_cool_mode(
+            hc.get("sense", "heat"),
+            context=f"Load {k} thermal_battery",
+        )
         sense_coeff = 1 if sense == "heat" else -1
 
         # Use parameterized values if available (enables warm-start on cache hit)
@@ -1953,7 +1968,6 @@ class Optimization:
         penalty_expr = 0
         desired_temps_list = hc.get("desired_temperatures", [])
         overshoot_temperature = hc.get("overshoot_temperature", None)
-        sense = hc.get("sense", "heat")
         sense_coeff = 1 if sense == "heat" else -1
 
         if desired_temps_list and overshoot_temperature is not None:
