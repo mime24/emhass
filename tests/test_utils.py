@@ -2421,7 +2421,9 @@ class TestHeatingDemand(unittest.TestCase):
             )
 
             self.assertTrue(
-                any("outdoor temperature <= supply temperature" in msg for msg in log_context.output)
+                any(
+                    "outdoor temperature <= supply temperature" in msg for msg in log_context.output
+                )
             )
 
         self.assertEqual(cops[0], 1.0)

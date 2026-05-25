@@ -1898,7 +1898,8 @@ class Optimization:
             constraints.append(
                 predicted_temp_thermal[1:]
                 == predicted_temp_thermal[:-1]
-                + conversion * (sense_coeff * q_input[:-1] - heating_demand[:-1] - thermal_losses[:-1])
+                + conversion
+                * (sense_coeff * q_input[:-1] - heating_demand[:-1] - thermal_losses[:-1])
             )
 
             # Store reference for auto-persistence on cache hit
@@ -1913,7 +1914,8 @@ class Optimization:
                 == predicted_temp_thermal[:-1]
                 + conversion
                 * (
-                    sense_coeff * (cp.multiply(heatpump_cops[:-1], p_deferrable[:-1]) / 1000 * self.time_step)
+                    sense_coeff
+                    * (cp.multiply(heatpump_cops[:-1], p_deferrable[:-1]) / 1000 * self.time_step)
                     - heating_demand[:-1]
                     - thermal_losses[:-1]
                 )
@@ -2867,7 +2869,7 @@ class Optimization:
             self.logger.warning(
                 "cost_forecast_per_deferrable_load is set but is %s, not a list (value: %r). "
                 "Treating as 'no override' for all loads. Use JSON null or an array of "
-                "per-load arrays (not the string \"null\").",
+                'per-load arrays (not the string "null").',
                 type(cost_per_load_overrides).__name__,
                 cost_per_load_overrides,
             )
