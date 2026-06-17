@@ -2729,12 +2729,19 @@ class Optimization:
         # Per-source COP arrays (HP uses Carnot, gas / oil / district use flat
         # efficiency). Resolve each source's conversion factor from its config.
         cop_arrays: list[np.ndarray] = []
+        source_signs: list[int] = []
         for k in load_ids:
             src_cfg = self._get_load_source_config(k)
             cops = utils.resolve_thermal_battery_cop(
                 src_cfg, outdoor_temp_arr.tolist(), length=required_len
             )
             cop_arrays.append(np.asarray(cops))
+            src_sense = utils.normalize_heat_cool_mode(
+                src_cfg.get("sense") or "heat",
+                field_name="sense",
+                context=f"Shared tank {tank_id} source load {k}",
+            )
+            source_signs.append(1 if src_sense == "heat" else -1)
 
         # Build CVXPY tank temperature variable
         predicted_temp = cp.Variable(required_len, name=f"temp_shared_{tank_id}")
@@ -2743,9 +2750,12 @@ class Optimization:
         # Heat input is the SUM of contributions from all member sources
         # raw_heat[t] = sum_k(cop_k[t] * p_deferrable[k][t] / 1000 * dt)
         raw_heat = 0
-        for k, cops in zip(load_ids, cop_arrays):
+        for k, cops, src_sign in zip(load_ids, cop_arrays, source_signs):
             p_k = self.vars["p_deferrable"][k]
-            raw_heat = raw_heat + cp.multiply(cops[:-1], p_k[:-1]) / 1000 * self.time_step
+            raw_heat = (
+                raw_heat
+                + src_sign * cp.multiply(cops[:-1], p_k[:-1]) / 1000 * self.time_step
+            )
 
         # First-order thermal dynamics
         # T[t+1] = T[t] + conversion * (raw_heat[t] - demand[t] - loss[t])
