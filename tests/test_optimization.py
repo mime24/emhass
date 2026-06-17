@@ -2737,6 +2737,44 @@ class TestOptimization(unittest.IsolatedAsyncioTestCase):
             "Heating power must be non-negative",
         )
 
+    def test_thermal_battery_infeasibility_q_input_start_zero_cooling(self):
+        """Cooling-mode symmetry: release q_input[0] at/above max with zero initial input.
+
+        Mirrors the heating-side regression above for sense='cool'. With thermal
+        inertia active, fixing q_input[0]=0 can violate the first upper temperature
+        bound when start_temperature is already at max_temperatures[0].
+        """
+        self.df_input_data_dayahead = self.prepare_forecast_data()
+        self.df_input_data_dayahead["outdoor_temperature_forecast"] = [32.0] * 48
+
+        runtimeparams = {
+            "def_load_config": [
+                {
+                    "thermal_battery": {
+                        "start_temperature": 24.0,  # == max_temperatures[0]
+                        "supply_temperature": 10.0,
+                        "volume": 50.0,
+                        "specific_heating_demand": 100.0,
+                        "area": 100.0,
+                        "min_temperatures": [18.0] * 48,
+                        "max_temperatures": [24.0] * 48,
+                        "thermal_inertia_time_constant": 1.5,
+                        "q_input_initial": 0.0,
+                        "sense": "cool",
+                    }
+                },
+            ]
+        }
+
+        opt_res = self.run_optimization_with_config(runtimeparams["def_load_config"])
+
+        self.assertEqual(opt_res["optim_status"].unique()[0], "Optimal")
+        self.assertIn("P_deferrable0", opt_res.columns)
+        self.assertTrue(
+            (opt_res["P_deferrable0"] >= 0).all(),
+            "Cooling actuator power must be non-negative",
+        )
+
     def test_persist_q_input_infeasible_fallback(self):
         """Test that _persist_q_input resets q_input_start after an infeasible solve.
 

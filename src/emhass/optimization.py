@@ -2446,23 +2446,38 @@ class Optimization:
             elif isinstance(q_input_start, int | float):
                 q_start_val = float(q_input_start)
 
-            # min_temperatures_list is guaranteed non-empty by the validator above.
+            # min/max temperature lists are guaranteed non-empty by validators above.
             min_temp_0 = float(min_temperatures_list[0])
+            max_temp_0 = float(max_temperatures_list[0])
 
-            if q_start_val < 1e-6 and start_temp_float <= min_temp_0:
-                # When q_input_start is near zero AND temperature is at/below the
-                # minimum, fixing q_input[0]=0 makes the problem infeasible because
-                # the temperature would drop below min at the next timestep.
-                # Let the solver choose a feasible initial heat input instead.
+            release_q_input_start = False
+            if sense == "heat" and q_start_val < 1e-6 and start_temp_float <= min_temp_0:
+                # Heating mode: with q_input[0] pinned to zero, the first step can
+                # violate the lower temperature bound when already at the floor.
+                release_q_input_start = True
                 self.logger.debug(
                     "Load %s: releasing q_input[0] constraint "
-                    "(q_start=%.4f, start_temp=%.1f, min_temp=%.1f)",
+                    "(mode=heat, q_start=%.4f, start_temp=%.1f, min_temp=%.1f)",
                     k,
                     q_start_val,
                     start_temp_float,
                     min_temp_0,
                 )
-            else:
+            if sense == "cool" and q_start_val < 1e-6 and start_temp_float >= max_temp_0:
+                # Cooling mode: symmetric case of the heating guard above. With
+                # zero initial cooling energy at/above the max bound, the first
+                # step can violate the upper temperature bound.
+                release_q_input_start = True
+                self.logger.debug(
+                    "Load %s: releasing q_input[0] constraint "
+                    "(mode=cool, q_start=%.4f, start_temp=%.1f, max_temp=%.1f)",
+                    k,
+                    q_start_val,
+                    start_temp_float,
+                    max_temp_0,
+                )
+
+            if not release_q_input_start:
                 constraints.append(q_input[0] == q_input_start)
 
             # Raw heat input: COP * P_hp / 1000 * dt (kWh thermal per timestep)
