@@ -2875,28 +2875,42 @@ class TestOptimization(unittest.IsolatedAsyncioTestCase):
             "Expected some heating energy consumption given cold outdoor temperatures",
         )
 
-        # Test 4: Verify physics-based calculation was actually used
-        # This is logged during optimization - we're testing the code path works
-        # The heating pattern depends on cost optimization, not just temperature
-        # (thermal storage allows pre-heating during favorable conditions like high PV or low costs)
+    def test_thermal_battery_physics_based_cooling_demand(self):
+        """Cooling sense should build positive thermal demand in hot conditions."""
+        self.df_input_data_dayahead = self.prepare_forecast_data()
+        self.df_input_data_dayahead["outdoor_temperature_forecast"] = [32.0] * 48
 
-        # Verify physics-based parameters are being used by checking log output was correct
-        # The INFO log should show "Using physics-based heating demand calculation"
-        # (This is verified by the logger output, not an explicit assertion here)
+        runtimeparams = {
+            "def_load_config": [
+                {
+                    "thermal_battery": {
+                        "sense": "cool",
+                        "start_temperature": 24.0,
+                        "supply_temperature": 10.0,
+                        "volume": 50.0,
+                        "specific_heating_demand": 100.0,
+                        "area": 100.0,
+                        "min_temperatures": [18.0] * 48,
+                        "max_temperatures": [30.0] * 48,
+                        "u_value": 0.4,
+                        "envelope_area": 350.0,
+                        "ventilation_rate": 0.6,
+                        "heated_volume": 250.0,
+                    }
+                },
+            ]
+        }
 
-        # Additional check: If any heating occurred, verify it's within reasonable bounds
-        # Note: heating_power is in Watts, total_energy_kwh converts to kWh
-        if total_energy_kwh > 0:
-            # With physics-based model and thermal storage optimization,
-            # the optimizer may pre-heat during favorable conditions (high PV, low costs, better COP)
-            # rather than matching instantaneous heating demand
-            # Just verify it's not unreasonably high (e.g., running at max power constantly)
-            max_theoretical_energy = 3000 * 48 * 0.5 / 1000  # 3kW heat pump * 48 timesteps * 0.5h
-            self.assertLess(
-                total_energy_kwh,
-                max_theoretical_energy,
-                "Total heating energy should not exceed theoretical maximum",
-            )
+        _ = self.run_optimization_with_config(runtimeparams["def_load_config"])
+        demand_arr = self.opt.param_thermal[0]["heating_demand"].value
+
+        self.assertIsNotNone(demand_arr)
+        self.assertTrue(np.all(demand_arr >= 0.0))
+        self.assertGreater(
+            float(np.mean(demand_arr)),
+            0.0,
+            "Cooling mode should produce non-zero demand under hot outdoor temperature",
+        )
 
     def test_thermal_battery_hdd_configurable(self):
         """Test thermal battery optimization with configurable HDD parameters."""

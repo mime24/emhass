@@ -1958,6 +1958,39 @@ class TestHeatingDemand(unittest.TestCase):
         # Should also match explicit 30 min
         np.testing.assert_array_almost_equal(demand_series_no_dt, demand_explicit)
 
+    def test_calculate_cooling_demand_basic(self):
+        """Cooling demand should rise with hotter outdoor temperature above base."""
+        specific_cooling_demand = 120.0
+        floor_area = 100.0
+        outdoor_temps = np.array([20.0, 24.0, 28.0, 32.0])
+
+        cooling_demand = utils.calculate_cooling_demand(
+            specific_cooling_demand=specific_cooling_demand,
+            floor_area=floor_area,
+            outdoor_temperature_forecast=outdoor_temps,
+            base_temperature=24.0,
+            annual_reference_cdd=3000.0,
+            optimization_time_step=60,
+        )
+
+        self.assertTrue(np.all(cooling_demand >= 0.0))
+        self.assertEqual(cooling_demand[0], 0.0)
+        self.assertEqual(cooling_demand[1], 0.0)
+        self.assertGreater(cooling_demand[2], 0.0)
+        self.assertGreater(cooling_demand[3], cooling_demand[2])
+
+    def test_calculate_cooling_demand_no_cooling_needed(self):
+        """Cooling demand should be zero at or below base temperature."""
+        cooling_demand = utils.calculate_cooling_demand(
+            specific_cooling_demand=100.0,
+            floor_area=120.0,
+            outdoor_temperature_forecast=np.array([10.0, 18.0, 24.0]),
+            base_temperature=24.0,
+            annual_reference_cdd=3000.0,
+            optimization_time_step=30,
+        )
+        self.assertTrue(np.allclose(cooling_demand, 0.0))
+
     def test_calculate_heating_demand_physics_no_solar_basic_monotonic(self):
         """No solar gains: zero demand when outdoor >= indoor, higher demand for colder steps."""
         indoor_temp = 21.0
@@ -2062,6 +2095,39 @@ class TestHeatingDemand(unittest.TestCase):
             np.sum(demand_no_solar[solar_irradiance > 0.0]),
             "Solar irradiance should reduce total heating demand during sunny periods",
         )
+
+    def test_calculate_cooling_demand_physics_with_gains_increases_demand(self):
+        """For cooling physics, solar and internal gains should increase demand."""
+        indoor_temp = 24.0
+        outdoor_temps = np.array([30.0, 30.0, 30.0, 30.0])
+        optimization_time_step = 60
+
+        kwargs = {
+            "u_value": 0.35,
+            "envelope_area": 380.0,
+            "ventilation_rate": 0.4,
+            "heated_volume": 240.0,
+            "indoor_target_temperature": indoor_temp,
+            "outdoor_temperature_forecast": outdoor_temps,
+            "optimization_time_step": optimization_time_step,
+        }
+
+        demand_no_gains = utils.calculate_cooling_demand_physics(**kwargs)
+        demand_with_solar = utils.calculate_cooling_demand_physics(
+            **kwargs,
+            solar_irradiance_forecast=np.array([0.0, 300.0, 500.0, 0.0]),
+            window_area=20.0,
+            shgc=0.6,
+        )
+        demand_with_internal = utils.calculate_cooling_demand_physics(
+            **kwargs,
+            internal_gains_forecast=np.array([500.0, 1000.0, 1500.0, 800.0]),
+            internal_gains_factor=0.7,
+        )
+
+        self.assertTrue(np.all(demand_no_gains >= 0.0))
+        self.assertTrue(np.all(demand_with_solar >= demand_no_gains))
+        self.assertTrue(np.all(demand_with_internal >= demand_no_gains))
 
     def test_calculate_heating_demand_physics_scaling_with_timestep(self):
         """Sanity check: total demand scales appropriately with optimization_time_step."""

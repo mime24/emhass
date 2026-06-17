@@ -931,6 +931,48 @@ def calculate_heating_demand(
     return specific_heating_demand * floor_area * (hdd_per_timestep_scaled / annual_reference_hdd)
 
 
+def calculate_cooling_demand(
+    specific_cooling_demand: float,
+    floor_area: float,
+    outdoor_temperature_forecast: np.ndarray | pd.Series,
+    base_temperature: float = 24.0,
+    annual_reference_cdd: float = 3000.0,
+    optimization_time_step: int | None = None,
+) -> np.ndarray:
+    """Calculate cooling demand per timestep using cooling degree days (CDD).
+
+    Mirrors ``calculate_heating_demand`` but with the cooling convention:
+    ``CDD = max(outdoor_temperature - base_temperature, 0)``.
+    """
+
+    outdoor_temps = (
+        outdoor_temperature_forecast.values
+        if isinstance(outdoor_temperature_forecast, pd.Series)
+        else np.asarray(outdoor_temperature_forecast)
+    )
+
+    cdd_per_timestep = np.maximum(outdoor_temps - base_temperature, 0.0)
+
+    if optimization_time_step is None:
+        if isinstance(outdoor_temperature_forecast, pd.Series) and isinstance(
+            outdoor_temperature_forecast.index, pd.DatetimeIndex
+        ):
+            if len(outdoor_temperature_forecast.index) > 1:
+                freq_minutes = (
+                    outdoor_temperature_forecast.index[1] - outdoor_temperature_forecast.index[0]
+                ).total_seconds() / 60.0
+                hours_per_timestep = freq_minutes / 60.0
+            else:
+                hours_per_timestep = 0.5
+        else:
+            hours_per_timestep = 0.5
+    else:
+        hours_per_timestep = optimization_time_step / 60.0
+
+    cdd_per_timestep_scaled = cdd_per_timestep * (hours_per_timestep / 24.0)
+    return specific_cooling_demand * floor_area * (cdd_per_timestep_scaled / annual_reference_cdd)
+
+
 def calculate_heating_demand_physics(
     u_value: float,
     envelope_area: float,
@@ -1106,6 +1148,78 @@ def calculate_heating_demand_physics(
     # Convert to kWh for the timestep
     hours_per_timestep = optimization_time_step / 60.0
     return total_loss_kw * hours_per_timestep
+
+
+def calculate_cooling_demand_physics(
+    u_value: float,
+    envelope_area: float,
+    ventilation_rate: float,
+    heated_volume: float,
+    indoor_target_temperature: float,
+    outdoor_temperature_forecast: np.ndarray | pd.Series,
+    optimization_time_step: int,
+    solar_irradiance_forecast: np.ndarray | pd.Series | None = None,
+    window_area: float | None = None,
+    shgc: float = 0.6,
+    internal_gains_forecast: np.ndarray | pd.Series | None = None,
+    internal_gains_factor: float = 0.0,
+) -> np.ndarray:
+    """Calculate cooling demand per timestep based on building heat-gain physics.
+
+    Mirrors ``calculate_heating_demand_physics`` with cooling convention:
+    demand grows when outdoor is warmer than indoor target. Solar and internal
+    gains increase cooling demand.
+    """
+
+    outdoor_temps = (
+        outdoor_temperature_forecast.values
+        if isinstance(outdoor_temperature_forecast, pd.Series)
+        else np.asarray(outdoor_temperature_forecast)
+    )
+
+    temp_diff = outdoor_temps - indoor_target_temperature
+    temp_diff = np.maximum(temp_diff, 0.0)
+
+    transmission_gain_kw = u_value * envelope_area * temp_diff / 1000.0
+    air_density = 1.2
+    air_heat_capacity = 1.005
+    ventilation_gain_kw = (
+        ventilation_rate * heated_volume * air_density * air_heat_capacity * temp_diff / 3600.0
+    )
+
+    total_gain_kw = transmission_gain_kw + ventilation_gain_kw
+
+    if solar_irradiance_forecast is not None and window_area is not None:
+        solar_irradiance = (
+            solar_irradiance_forecast.values
+            if isinstance(solar_irradiance_forecast, pd.Series)
+            else np.asarray(solar_irradiance_forecast)
+        )
+        solar_gains_kw = window_area * shgc * solar_irradiance / 1000.0
+        total_gain_kw = total_gain_kw + np.maximum(solar_gains_kw, 0.0)
+
+    if internal_gains_factor < 0 or internal_gains_factor > 1:
+        raise ValueError(
+            f"internal_gains_factor must be between 0 and 1, got {internal_gains_factor}"
+        )
+
+    if internal_gains_forecast is not None and internal_gains_factor > 0:
+        internal_gains = (
+            internal_gains_forecast.values
+            if isinstance(internal_gains_forecast, pd.Series)
+            else internal_gains_forecast
+        )
+        internal_gains = np.asarray(internal_gains).reshape(-1)
+        if len(internal_gains) != len(outdoor_temps):
+            raise ValueError(
+                f"internal_gains_forecast length ({len(internal_gains)}) must match "
+                f"outdoor_temperature_forecast length ({len(outdoor_temps)})"
+            )
+        internal_gains_kw = internal_gains * internal_gains_factor / W_TO_KW
+        total_gain_kw = total_gain_kw + np.maximum(internal_gains_kw, 0.0)
+
+    hours_per_timestep = optimization_time_step / 60.0
+    return total_gain_kw * hours_per_timestep
 
 
 def update_params_with_ha_config(
