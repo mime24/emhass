@@ -1638,6 +1638,66 @@ class TestCommandLineAsyncUtils(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(found_temp, "Should publish predicted temperature")
         self.assertTrue(found_heat, "Should publish heating demand")
 
+    async def test_publish_thermal_loads_cooling_mode(self):
+        """
+        Test _publish_thermal_loads with cooling mode thermal load.
+        Verifies that cooling_demand entity is published instead of heating_demand.
+        """
+        # Setup thermal config in cooling mode
+        params = await TestCommandLineAsyncUtils.get_test_params()
+        params["optim_conf"]["def_load_config"] = [
+            {"thermal_config": {"model_type": "ideal", "sense": "cool"}}
+        ]
+        params["optim_conf"]["number_of_deferrable_loads"] = 1
+        # Setup passed_data with cooling IDs
+        runtimeparams = {
+            "custom_predicted_temperature_id": [
+                {"entity_id": "sensor.temp_cool", "unit_of_measurement": "C", "friendly_name": "Cool Temp"}
+            ],
+            "custom_cooling_demand_id": [
+                {"entity_id": "sensor.cool_demand", "unit_of_measurement": "W", "friendly_name": "Cool Demand"}
+            ],
+        }
+        params["passed_data"] = runtimeparams
+        params_json = orjson.dumps(params).decode("utf-8")
+        input_data_dict = await set_input_data_dict(
+            emhass_conf,
+            "profit",
+            params_json,
+            None,
+            "publish-data",
+            logger,
+            get_data_from_file=True,
+        )
+        # Mock the optimization results DataFrame with cooling columns
+        idx = pd.date_range(end=pd.Timestamp.now(tz="Europe/Paris"), periods=1, freq="30min")
+        mock_df = pd.DataFrame(
+            {
+                "predicted_temp_cooler0": [18.5],
+                "cooling_demand_cooler0": [800.0],
+                "P_PV": [0.0],
+                "P_Load": [0.0],
+                "P_grid": [0.0],
+                "optim_status": ["Optimal"],
+                "unit_load_cost": [0.1],
+                "unit_prod_price": [0.05],
+            },
+            index=idx,
+        )
+        # Mock rh.post_data
+        input_data_dict["rh"].post_data = AsyncMock(return_value=True)
+        # Patch _get_closest_index to return 0 to bypass timestamp matching issues
+        with patch("emhass.command_line._get_closest_index", return_value=0):
+            # Execute
+            await publish_data(input_data_dict, logger, opt_res_latest=mock_df)
+        # Verify calls include cooling-mode thermal columns
+        call_args_list = input_data_dict["rh"].post_data.call_args_list
+        found_temp_col = any("predicted_temp_cooler0" in str(args) for args in call_args_list)
+        found_cool_col = any("cooling_demand_cooler0" in str(args) for args in call_args_list)
+        found_heat_col = any("heating_demand_heater0" in str(args) for args in call_args_list)
+        self.assertTrue(found_temp_col, "Should publish predicted temperature column for cooler")
+        self.assertTrue(found_cool_col, "Should publish cooling demand column")
+        self.assertFalse(found_heat_col, "Should not publish heating demand column in cool mode")
     async def test_regressor_preparation_errors(self):
         """
         Test logger error paths in _prepare_regressor_fit (missing CSV, missing columns).
