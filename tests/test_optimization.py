@@ -2018,7 +2018,7 @@ class TestOptimization(unittest.IsolatedAsyncioTestCase):
             check_names=False,
         )
         # sense=cool + positive heating_rate must lower temperature when pump runs
-        temp = self.opt_res_dayahead["predicted_temp_heater0"]
+        temp = self.opt_res_dayahead["predicted_temp_cooler0"]
         assert temp.iloc[2] < temp.iloc[1], (
             f"sense=cool + positive heating_rate must lower temperature; "
             f"got temp[1]={temp.iloc[1]}, temp[2]={temp.iloc[2]}"
