@@ -1,0 +1,19 @@
+{
+  "status": "ok",
+  "timestamp": "2026-06-18T18:01:14Z",
+  "action": "naive-mpc-optim",
+  "stage_times": {
+    "pv_forecast": 0.0031183750252239406,
+    "load_forecast": 0.0006545839714817703,
+    "price_prep": 0.014211625035386533,
+    "optim_solve.build": 0.00043454201659187675,
+    "optim_solve.solve": 0.00397483300184831,
+    "optim_solve.extract": 0.001116541970986873,
+    "optim_solve": 0.005675750027876347
+  },
+  "duration_total_seconds": 0.020052500010933727,
+  "emhass_version": "0.17.7",
+  "schema_version": "1.0",
+  "infeasible": false,
+  "error_message": null
+}

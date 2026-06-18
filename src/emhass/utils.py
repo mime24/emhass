@@ -1348,6 +1348,7 @@ async def treat_runtimeparams(
     custom_deferrable_state_id = []
     custom_predicted_temperature_id = []
     custom_heating_demand_id = []
+    custom_cooling_demand_id = []
     for k in range(params["optim_conf"]["number_of_deferrable_loads"]):
         custom_deferrable_forecast_id.append(
             {
@@ -1379,6 +1380,14 @@ async def treat_runtimeparams(
                 "device_class": "energy",
                 "unit_of_measurement": "kWh",
                 "friendly_name": f"Heating demand {k}",
+            }
+        )
+        custom_cooling_demand_id.append(
+            {
+                "entity_id": f"sensor.cooling_demand{k}",
+                "device_class": "energy",
+                "unit_of_measurement": "kWh",
+                "friendly_name": f"Cooling demand {k}",
             }
         )
     default_passed_dict = {
@@ -1452,6 +1461,7 @@ async def treat_runtimeparams(
         "custom_deferrable_state_id": custom_deferrable_state_id,
         "custom_predicted_temperature_id": custom_predicted_temperature_id,
         "custom_heating_demand_id": custom_heating_demand_id,
+        "custom_cooling_demand_id": custom_cooling_demand_id,
         "publish_prefix": "",
     }
     if "passed_data" in params.keys():
@@ -2169,6 +2179,10 @@ async def treat_runtimeparams(
             params["passed_data"]["custom_heating_demand_id"] = runtimeparams[
                 "custom_heating_demand_id"
             ]
+        if "custom_cooling_demand_id" in runtimeparams.keys():
+            params["passed_data"]["custom_cooling_demand_id"] = runtimeparams[
+                "custom_cooling_demand_id"
+            ]
 
     # split config categories from params
     retrieve_hass_conf = params["retrieve_hass_conf"]
@@ -2330,13 +2344,14 @@ def get_injection_dict(df: pd.DataFrame, plot_size: int | None = 1366) -> dict:
         image_path_1 = fig_1.to_html(full_html=False, default_width="75%")
     # Figure Thermal: Temperatures (Optional)
     # Detect columns for predicted, target, min, or max temperatures
+    # Supports both heater and cooler (heating/cooling) modes
     cols_temp = [
         i
         for i in df.columns.to_list()
-        if "predicted_temp_heater" in i
-        or "target_temp_heater" in i
-        or "min_temp_heater" in i
-        or "max_temp_heater" in i
+        if ("predicted_temp_heater" in i or "predicted_temp_cooler" in i)
+        or ("target_temp_heater" in i or "target_temp_cooler" in i)
+        or ("min_temp_heater" in i or "min_temp_cooler" in i)
+        or ("max_temp_heater" in i or "max_temp_cooler" in i)
     ]
     image_path_temp = None
     if len(cols_temp) > 0:

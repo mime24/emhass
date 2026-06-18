@@ -2503,12 +2503,11 @@ async def _publish_thermal_variable(
 
 
 async def _publish_thermal_loads(ctx: PublishContext, opt_res_latest: pd.DataFrame) -> list[str]:
-    """Publish predicted temperature and heating demand for thermal loads."""
+    """Publish predicted temperature and heating/cooling demand for thermal loads."""
     cols = []
     if "custom_predicted_temperature_id" not in ctx.params["passed_data"]:
         return cols
     custom_temp = ctx.params["passed_data"]["custom_predicted_temperature_id"]
-    custom_heat = ctx.params["passed_data"].get("custom_heating_demand_id")
     def_load_config = ctx.optim_conf.get("def_load_config", [])
     if not isinstance(def_load_config, list):
         def_load_config = []
@@ -2528,6 +2527,12 @@ async def _publish_thermal_loads(ctx: PublishContext, opt_res_latest: pd.DataFra
             device_type = "cooler"
             demand_type = "cooling_demand"
         
+        # Select appropriate demand entity ID based on mode
+        if sense == "cool":
+            custom_demand = ctx.params["passed_data"].get("custom_cooling_demand_id")
+        else:
+            custom_demand = ctx.params["passed_data"].get("custom_heating_demand_id")
+        
         col_t = await _publish_thermal_variable(
             ctx.rh,
             opt_res_latest,
@@ -2546,7 +2551,7 @@ async def _publish_thermal_loads(ctx: PublishContext, opt_res_latest: pd.DataFra
             opt_res_latest,
             ctx.idx,
             k,
-            custom_heat,
+            custom_demand,
             f"{demand_type}_{device_type}",
             "energy",
             "energy",
