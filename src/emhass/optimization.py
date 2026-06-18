@@ -3594,7 +3594,17 @@ class Optimization:
         # Thermal Details
         for k, pred_temp_var in predicted_temps.items():
             temp_values = get_val(pred_temp_var)
-            opt_tp[f"predicted_temp_heater{k}"] = np.round(temp_values, 2)
+            
+            # Determine device type based on sense parameter
+            device_type = "heater"
+            if "def_load_config" in self.optim_conf:
+                load_conf = self.optim_conf["def_load_config"][k]
+                conf = load_conf.get("thermal_config") or load_conf.get("thermal_battery") or {}
+                sense = (conf.get("sense") or "heat").lower().strip()
+                if sense == "cool":
+                    device_type = "cooler"
+            
+            opt_tp[f"predicted_temp_{device_type}{k}"] = np.round(temp_values, 2)
 
             if "def_load_config" in self.optim_conf:
                 # Robustly get config (support both thermal_config and thermal_battery)
@@ -3610,7 +3620,7 @@ class Optimization:
                     if len(tgt_series) > len(opt_tp):
                         tgt_series = tgt_series.iloc[: len(opt_tp)]
                     tgt_series.index = opt_tp.index[: len(tgt_series)]
-                    opt_tp[f"target_temp_heater{k}"] = tgt_series
+                    opt_tp[f"target_temp_{device_type}{k}"] = tgt_series
 
                 # Store Explicit Min/Max Constraints (New request)
                 for bound in ["min", "max"]:
@@ -3621,15 +3631,36 @@ class Optimization:
                         if len(bound_series) > len(opt_tp):
                             bound_series = bound_series.iloc[: len(opt_tp)]
                         bound_series.index = opt_tp.index[: len(bound_series)]
-                        opt_tp[f"{bound}_temp_heater{k}"] = bound_series
+                        opt_tp[f"{bound}_temp_{device_type}{k}"] = bound_series
 
         for k, heat_demand in heating_demands.items():
-            opt_tp[f"heating_demand_heater{k}"] = heat_demand
+            # Determine device type based on sense parameter
+            device_type = "heater"
+            demand_type = "heating_demand"
+            if "def_load_config" in self.optim_conf:
+                load_conf = self.optim_conf["def_load_config"][k]
+                conf = load_conf.get("thermal_config") or load_conf.get("thermal_battery") or {}
+                sense = (conf.get("sense") or "heat").lower().strip()
+                if sense == "cool":
+                    device_type = "cooler"
+                    demand_type = "cooling_demand"
+            
+            opt_tp[f"{demand_type}_{device_type}{k}"] = heat_demand
 
         if q_inputs:
             for k, q_input_var in q_inputs.items():
                 q_values = get_val(q_input_var)
-                opt_tp[f"q_input_heater{k}"] = np.round(q_values, 4)
+                
+                # Determine device type based on sense parameter
+                device_type = "heater"
+                if "def_load_config" in self.optim_conf:
+                    load_conf = self.optim_conf["def_load_config"][k]
+                    conf = load_conf.get("thermal_config") or load_conf.get("thermal_battery") or {}
+                    sense = (conf.get("sense") or "heat").lower().strip()
+                    if sense == "cool":
+                        device_type = "cooler"
+                
+                opt_tp[f"q_input_{device_type}{k}"] = np.round(q_values, 4)
 
         # Debug Columns
         if debug:

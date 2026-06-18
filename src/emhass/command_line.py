@@ -2518,13 +2518,23 @@ async def _publish_thermal_loads(ctx: PublishContext, opt_res_latest: pd.DataFra
         load_cfg = def_load_config[k]
         if "thermal_config" not in load_cfg and "thermal_battery" not in load_cfg:
             continue
+        
+        # Determine device type and demand type based on sense parameter
+        device_type = "heater"
+        demand_type = "heating_demand"
+        conf = load_cfg.get("thermal_config") or load_cfg.get("thermal_battery") or {}
+        sense = (conf.get("sense") or "heat").lower().strip()
+        if sense == "cool":
+            device_type = "cooler"
+            demand_type = "cooling_demand"
+        
         col_t = await _publish_thermal_variable(
             ctx.rh,
             opt_res_latest,
             ctx.idx,
             k,
             custom_temp,
-            "predicted_temp_heater",
+            f"predicted_temp_{device_type}",
             "temperature",
             "temperature",
             ctx.common_kwargs,
@@ -2537,7 +2547,7 @@ async def _publish_thermal_loads(ctx: PublishContext, opt_res_latest: pd.DataFra
             ctx.idx,
             k,
             custom_heat,
-            "heating_demand_heater",
+            f"{demand_type}_{device_type}",
             "energy",
             "energy",
             ctx.common_kwargs,
