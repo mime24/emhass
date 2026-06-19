@@ -2619,11 +2619,14 @@ class Optimization:
 
             # Temperature uses filtered Q_input instead of raw heat
             # sense_coeff: +1 for heating (pump adds heat), -1 for cooling (pump removes heat)
+            # The demand term uses -sense_coeff so that it acts correctly in both modes:
+            #   heat mode (sense_coeff=+1): -demand → hot store cools as heat is extracted
+            #   cool mode (sense_coeff=-1): +demand → cold store warms as building heat flows in
             constraints.append(
                 predicted_temp_thermal[1:]
                 == predicted_temp_thermal[:-1]
                 + conversion
-                * (sense_coeff * q_input[:-1] - heating_demand[:-1] - thermal_losses[:-1])
+                * (sense_coeff * (q_input[:-1] - heating_demand[:-1]) - thermal_losses[:-1])
             )
 
             # Store reference for auto-persistence on cache hit
@@ -2633,14 +2636,17 @@ class Optimization:
             q_input = None
             # Original Langer & Volling equation (backward compatible)
             # sense_coeff: +1 for heating (pump adds heat), -1 for cooling (pump removes heat)
+            # See inertia path above for demand sign explanation.
             constraints.append(
                 predicted_temp_thermal[1:]
                 == predicted_temp_thermal[:-1]
                 + conversion
                 * (
                     sense_coeff
-                    * (cp.multiply(heatpump_cops[:-1], p_deferrable[:-1]) / 1000 * self.time_step)
-                    - heating_demand[:-1]
+                    * (
+                        cp.multiply(heatpump_cops[:-1], p_deferrable[:-1]) / 1000 * self.time_step
+                        - heating_demand[:-1]
+                    )
                     - thermal_losses[:-1]
                 )
             )

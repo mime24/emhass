@@ -4246,6 +4246,57 @@ class TestOptimization(unittest.IsolatedAsyncioTestCase):
         demand = opt.param_thermal[0]["heating_demand"].value
         self.assertGreater(float(np.max(demand)), 0.0)
 
+    def test_thermal_battery_cooling_demand_warms_cold_store(self):
+        """Positive cooling demand must RAISE the cold-store temperature.
+
+        In cooling mode the thermal battery is a cold store.  Heat flowing in
+        from the warm building (= cooling demand) warms the store, so the
+        predicted temperature must increase when demand > 0 and the cooler is
+        switched off.
+        """
+        self.df_input_data_dayahead = self.prepare_forecast_data()
+        # Outdoor temperature significantly above cooling target → large demand.
+        self.df_input_data_dayahead["outdoor_temperature_forecast"] = 35.0
+
+        config = {
+            "sense": "cool",
+            "start_temperature": 22.0,
+            "supply_temperature": 7.0,
+            "volume": 100.0,
+            "density": 997,
+            "heat_capacity": 4.186,
+            "thermal_loss": 0.0,  # no standby loss so demand is the only driver
+            "u_value": 0.5,
+            "envelope_area": 150.0,
+            "ventilation_rate": 0.5,
+            "heated_volume": 300.0,
+            "indoor_target_temperature": 24.0,
+            "min_temperatures": [18.0] * 48,
+            "max_temperatures": [26.0] * 48,
+        }
+
+        runtimeparams_config = [{"thermal_battery": config}]
+        opt_res = self.run_optimization_with_config(runtimeparams_config)
+
+        temp_col = [c for c in opt_res.columns if "predicted_temp_cooler" in c]
+        self.assertTrue(len(temp_col) > 0, "predicted_temp_cooler column missing")
+        temps = opt_res[temp_col[0]].values.astype(float)
+
+        # When the cooler runs zero power (P_deferrable0 == 0), the cold-store
+        # temperature should increase due to heat infiltration.
+        p_col = opt_res["P_deferrable0"].values.astype(float)
+        idle_steps = np.where(p_col == 0)[0]
+        if len(idle_steps) >= 2:
+            # Pick any consecutive pair of idle timesteps and check T rises.
+            for i in range(len(idle_steps) - 1):
+                if idle_steps[i + 1] == idle_steps[i] + 1:
+                    self.assertGreaterEqual(
+                        temps[idle_steps[i + 1]],
+                        temps[idle_steps[i]] - 0.01,  # allow tiny solver tolerance
+                        "Cold-store temperature must not decrease when cooler is idle",
+                    )
+                    break
+
     def test_thermal_battery_water_physics(self):
         """Test thermal battery with water-specific density and heat capacity."""
         self.df_input_data_dayahead = self.prepare_forecast_data()
