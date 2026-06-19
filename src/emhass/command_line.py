@@ -786,11 +786,12 @@ async def _prepare_perfect_optim(ctx: SetupContext):
 
 async def _get_dayahead_pv_forecast(ctx: SetupContext):
     """Helper to retrieve and optionally adjust PV forecast."""
-    # Check if we should calculate PV forecast
-    if not (
-        ctx.optim_conf["set_use_pv"]
-        or ctx.optim_conf.get("weather_forecast_method", None) == "list"
-    ):
+    pv_list = ctx.params["passed_data"].get("pv_power_forecast")
+    # Check if we should calculate PV forecast.
+    # When a pv_power_forecast list is passed at runtime the weather forecast is
+    # still fetched so outdoor temperature / GHI data remain available for
+    # thermal models.  The PV power values are then overridden with the list.
+    if not (ctx.optim_conf["set_use_pv"] or pv_list is not None):
         return pd.Series(0, index=ctx.fcst.forecast_dates), None
     # Get weather forecast
     df_weather = await ctx.fcst.get_weather_forecast(
@@ -799,6 +800,11 @@ async def _get_dayahead_pv_forecast(ctx: SetupContext):
     if isinstance(df_weather, bool) and not df_weather:
         return None, None
     p_pv_forecast = ctx.fcst.get_power_from_weather(df_weather)
+    # Override PV power with the runtime-passed list if provided
+    if pv_list is not None:
+        p_pv_forecast = pd.Series(
+            pv_list[: len(p_pv_forecast)], index=p_pv_forecast.index, name=p_pv_forecast.name
+        )
     # Adjust PV forecast if needed
     if ctx.optim_conf["set_use_adjusted_pv"]:
         p_pv_forecast = await adjust_pv_forecast(
@@ -881,7 +887,13 @@ async def _get_naive_mpc_history(ctx: SetupContext):
     """Helper to retrieve historical data for Naive MPC."""
     # Check if we need to skip historical data retrieval
     is_list_forecast = ctx.optim_conf.get("load_forecast_method") == "list"
-    is_list_weather = ctx.optim_conf.get("weather_forecast_method") == "list"
+    # A runtime pv_power_forecast list is now stored in passed_data without
+    # changing weather_forecast_method (so weather is still fetched for outdoor
+    # temperature). Use the presence of the list in passed_data as the skip flag.
+    is_list_weather = (
+        ctx.optim_conf.get("weather_forecast_method") == "list"
+        or ctx.params["passed_data"].get("pv_power_forecast") is not None
+    )
     no_pv = not ctx.optim_conf["set_use_pv"]
 
     if (is_list_forecast and is_list_weather) or (is_list_forecast and no_pv):
@@ -902,10 +914,10 @@ async def _get_naive_mpc_history(ctx: SetupContext):
 
 async def _get_naive_mpc_pv_forecast(ctx: SetupContext, set_mix_forecast, df_input_data):
     """Helper to generate PV forecast for Naive MPC."""
-    # If PV is disabled and no weather list, return zero series
-    if not (
-        ctx.optim_conf["set_use_pv"] or ctx.optim_conf.get("weather_forecast_method") == "list"
-    ):
+    pv_list = ctx.params["passed_data"].get("pv_power_forecast")
+    # If PV is disabled and no runtime list, return zero series.
+    # When a list is passed the weather is still fetched for outdoor temperature.
+    if not (ctx.optim_conf["set_use_pv"] or pv_list is not None):
         return pd.Series(0, index=ctx.fcst.forecast_dates), None
     # Get weather forecast
     df_weather = await ctx.fcst.get_weather_forecast(
@@ -917,6 +929,11 @@ async def _get_naive_mpc_pv_forecast(ctx: SetupContext, set_mix_forecast, df_inp
     p_pv_forecast = ctx.fcst.get_power_from_weather(
         df_weather, set_mix_forecast=set_mix_forecast, df_now=df_input_data
     )
+    # Override PV power with the runtime-passed list if provided
+    if pv_list is not None:
+        p_pv_forecast = pd.Series(
+            pv_list[: len(p_pv_forecast)], index=p_pv_forecast.index, name=p_pv_forecast.name
+        )
     # Adjust PV forecast if needed
     if ctx.optim_conf["set_use_adjusted_pv"]:
         p_pv_forecast = await adjust_pv_forecast(

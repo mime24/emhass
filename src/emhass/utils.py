@@ -1823,7 +1823,13 @@ async def treat_runtimeparams(
                     forecast_input = forecast_data_df["value"].tolist()
                 if isinstance(forecast_input, list) and len(forecast_input) >= len(forecast_dates):
                     params["passed_data"][forecast_key] = forecast_input
-                    params["optim_conf"][forecast_methods[method]] = "list"
+                    # For pv_power_forecast the weather forecast is still fetched so that
+                    # outdoor temperature and irradiance data are available for thermal models.
+                    # The passed list is applied as an override AFTER the weather fetch
+                    # (see _get_dayahead_pv_forecast / _get_naive_mpc_pv_forecast in
+                    # command_line.py).  All other forecast keys switch to the "list" method.
+                    if forecast_key != "pv_power_forecast":
+                        params["optim_conf"][forecast_methods[method]] = "list"
                 else:
                     logger.error(
                         f"ERROR: The passed data is either the wrong type or the length is not correct, length should be {str(len(forecast_dates))}"
