@@ -4215,6 +4215,37 @@ class TestOptimization(unittest.IsolatedAsyncioTestCase):
         expected = float(opt.param_thermal[0]["q_input_var"].value[1])
         self.assertAlmostEqual(new_start, expected, places=4)
 
+    def test_update_thermal_params_uses_cooling_demand_in_cool_mode(self):
+        """Cache-hit thermal update must compute cooling demand when sense='cool'."""
+        self.df_input_data_dayahead = self.prepare_forecast_data()
+        # Keep outdoor temperature above cooling target so demand is strictly positive.
+        self.df_input_data_dayahead["outdoor_temperature_forecast"] = 30.0
+
+        config = {
+            "sense": "cool",
+            "start_temperature": 26.0,
+            "supply_temperature": 18.0,
+            "volume": 50.0,
+            "u_value": 0.5,
+            "envelope_area": 120.0,
+            "ventilation_rate": 0.5,
+            "heated_volume": 300.0,
+            "min_temperatures": [20.0] * 48,
+            "max_temperatures": [24.0] * 48,
+        }
+
+        self.optim_conf["def_load_config"] = [{"thermal_battery": config}]
+        opt = self.create_optimization()
+
+        opt.update_thermal_params(
+            self.optim_conf,
+            self.df_input_data_dayahead,
+            self.p_load_forecast.values.ravel(),
+        )
+
+        demand = opt.param_thermal[0]["heating_demand"].value
+        self.assertGreater(float(np.max(demand)), 0.0)
+
     def test_thermal_battery_water_physics(self):
         """Test thermal battery with water-specific density and heat capacity."""
         self.df_input_data_dayahead = self.prepare_forecast_data()
